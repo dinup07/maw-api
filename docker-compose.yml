@@ -1,0 +1,76 @@
+name: maw
+
+x-maw-image: &maw-image
+  build: .
+  image: maw:local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: maw
+      POSTGRES_PASSWORD: maw
+      POSTGRES_DB: maw
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maw -d maw"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mock-mcp:
+    <<: *maw-image
+    command: ["python", "mocks/mcp_kb_server.py", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8001), timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  mock-a2a:
+    <<: *maw-image
+    command: ["python", "mocks/a2a_billing_agent.py", "--port", "9001", "--public-url", "http://mock-a2a:9001"]
+    ports:
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9001/.well-known/agent-card.json', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  maw:
+    <<: *maw-image
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mock-mcp:
+        condition: service_healthy
+      mock-a2a:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MAW_DATABASE_URL: postgresql://maw:maw@postgres:5432/maw
+      MAW_PUBLIC_URL: ${MAW_PUBLIC_URL:-http://localhost:8000}
+      KB_MCP_URL: http://mock-mcp:8001/mcp
+      BILLING_AGENT_URL: http://mock-a2a:9001
+      MAW_TRACING_ENABLED: ${MAW_TRACING_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+    ports:
+      - "8000:8000"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    profiles: ["tracing"]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+      - "4318:4318"
+
+volumes:
+  pgdata:

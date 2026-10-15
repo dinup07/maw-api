@@ -59,3 +59,11 @@ Choices made where the spec is silent or ambiguous. Newest last.
     in `agents.*.url`. Phase 3 shipped without this; it was caught by the Phase 4 manual smoke test.
 21. **`/ready` probes the store with `list_runs(limit=1)`**; the `Store` protocol has no dedicated
     ping, and this exercises the same path real requests use.
+22. **The Dockerfile takes `UV_IMAGE` and `PYTHON_IMAGE` build args**, defaulting to the spec's
+    `ghcr.io/astral-sh/uv:0.11` and `python:3.12-slim`. Builds behind mirrors or proxies can point
+    them elsewhere without editing the file (needed to verify the image in a sandbox that blocks
+    ghcr.io). The resulting image is otherwise exactly the spec's.
+23. **The MCP mock disables FastMCP's DNS-rebinding protection when bound to a non-loopback
+    address.** FastMCP computes that protection at construction time for its default host
+    (127.0.0.1), so inside Compose it rejected `Host: mock-mcp:8001` with 421. Found by the Compose
+    end-to-end run; the mock stays protected when bound to localhost.

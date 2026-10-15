@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 ARTICLES = [
     {
@@ -89,6 +90,10 @@ def main() -> None:
     args = parser.parse_args()
     mcp.settings.host = args.host
     mcp.settings.port = args.port
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        # FastMCP enables DNS-rebinding protection for its default host (127.0.0.1) at construction,
+        # which would reject Host headers like "mock-mcp:8001" inside Docker Compose.
+        mcp.settings.transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
     mcp.run(transport="streamable-http")
 
 
