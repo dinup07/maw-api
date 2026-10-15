@@ -1,0 +1,32 @@
+{
+  "id": "kb_research",
+  "description": "Parallel fan-out (MCP search + local function) joined by a deferred node that summarises both.",
+  "models": {
+    "writer": { "provider": "scripted", "model": "writer",
+      "params": { "responses": "Summary prepared from the knowledge base search and the text statistics." } }
+  },
+  "nodes": [
+    { "id": "search", "type": "mcp", "server": "kb", "tool": "search_kb",
+      "arguments": { "query": "input", "limit": 3 }, "write_output": false },
+    { "id": "stats", "type": "function", "function": "text.stats",
+      "arguments": { "text": "input" }, "write_output": false },
+    { "id": "summarize", "type": "llm", "model": "writer", "defer": true,
+      "system_prompt": "Summarise the findings for the user in two sentences.",
+      "user_message": "Question: {{ input }}\nArticles: {{ articles }}\nQuestion length: {{ words }} words",
+      "inputs": { "articles": "nodes.search.articles", "words": "nodes.stats.words" } },
+    { "id": "result", "type": "transform",
+      "mapping": {
+        "text": "nodes.summarize.text",
+        "articles_found": "nodes.search.count",
+        "top_article": "nodes.search.articles.0.title || 'none'",
+        "question_words": "nodes.stats.words"
+      } }
+  ],
+  "edges": [
+    { "source": "start", "target": ["search", "stats"] },
+    { "source": "search", "target": "summarize" },
+    { "source": "stats", "target": "summarize" },
+    { "source": "summarize", "target": "result" },
+    { "source": "result", "target": "end" }
+  ]
+}

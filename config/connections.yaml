@@ -1,0 +1,21 @@
+# Server-side connections (trusted). Workflows reference these by name.
+# - Values may use ${env:NAME} or ${env:NAME:-default} (this file only) and ${secret:NAME}
+#   (reads MAW_SECRET_NAME; also allowed inside workflow definitions).
+# - stdio MCP servers may only be declared here, never inside a submitted workflow.
+# - Workflow-level `mcp_servers` / `agents` entries with the same name take precedence.
+mcp_servers:
+  kb:
+    transport: streamable_http
+    url: ${env:KB_MCP_URL:-http://localhost:8001/mcp}
+  # github:
+  #   url: https://api.githubcopilot.com/mcp/
+  #   headers:
+  #     Authorization: Bearer ${secret:GITHUB_TOKEN}
+  # filesystem:
+  #   transport: stdio
+  #   command: npx
+  #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
+agents:
+  billing:
+    url: ${env:BILLING_AGENT_URL:-http://localhost:9001}
+    description: Answers questions about invoices, charges and refunds.

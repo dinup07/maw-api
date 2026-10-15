@@ -1,0 +1,12 @@
+{
+  "id": "hello",
+  "description": "Smallest possible workflow: one LLM node. Also exposed as an A2A agent.",
+  "nodes": [
+    { "id": "reply", "type": "llm", "model": "scripted", "system_prompt": "You are a friendly assistant." }
+  ],
+  "edges": [
+    { "source": "start", "target": "reply" },
+    { "source": "reply", "target": "end" }
+  ],
+  "expose": { "a2a": true, "description": "Echoes what you say (scripted demo model)." }
+}

@@ -1,0 +1,32 @@
+{
+  "id": "approval",
+  "description": "Human-in-the-loop: draft a reply, pause for approval, revise in a bounded loop until approved.",
+  "models": {
+    "drafter": { "provider": "scripted", "model": "drafter",
+      "params": {
+        "rules": [{ "contains": "feedback", "respond": "Revised draft: we've refunded the duplicate charge and added a $10 credit." }],
+        "responses": "Draft: we've refunded the duplicate charge; it will arrive in 3 business days."
+      } }
+  },
+  "nodes": [
+    { "id": "draft", "type": "llm", "model": "drafter", "system_prompt": "Write a short customer reply." },
+    { "id": "review", "type": "human",
+      "prompt": "Reply 'approve' to send, or give feedback.\n\n{{ nodes.revise.text || nodes.draft.text }}",
+      "max_visits": 3 },
+    { "id": "revise", "type": "llm", "model": "drafter",
+      "system_prompt": "Revise the draft using the reviewer's feedback.",
+      "user_message": "Draft: {{ nodes.revise.text || nodes.draft.text }}\nReviewer feedback: {{ nodes.review.response }}",
+      "max_visits": 3 },
+    { "id": "send", "type": "transform",
+      "mapping": { "text": "nodes.revise.text || nodes.draft.text", "approved": true, "review_rounds": "visits.review" } }
+  ],
+  "edges": [
+    { "source": "start", "target": "draft" },
+    { "source": "draft", "target": "review" },
+    { "source": "review", "target": "revise",
+      "condition": [{ "field": "nodes.review.response", "operator": "in",
+                      "value": ["approve", "approved", "yes", "lgtm"], "target": "send" }] },
+    { "source": "revise", "target": "review" },
+    { "source": "send", "target": "end" }
+  ]
+}
