@@ -3,13 +3,14 @@
 from .catalog import Catalog, CatalogEntry
 from .persistence import Persistence, open_persistence
 from .service import RunNotFound, RunService, RunStateError
-from .store import TERMINAL, MemoryStore, RunRecord, StoredWorkflow
+from .store import TERMINAL, MemoryStore, PostgresStore, RunRecord, StoredWorkflow
 
 __all__ = [
     "TERMINAL",
     "Catalog",
     "CatalogEntry",
     "MemoryStore",
+    "PostgresStore",
     "Persistence",
     "RunNotFound",
     "RunRecord",

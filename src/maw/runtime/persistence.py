@@ -9,7 +9,7 @@ from typing import Any
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from .store import MemoryStore, Store
+from .store import MemoryStore, PostgresStore, Store
 
 log = logging.getLogger("maw.runtime")
 
@@ -27,4 +27,24 @@ async def open_persistence(database_url: str | None, stack: AsyncExitStack) -> P
         store = MemoryStore()
         await store.setup()
         return Persistence(store=store, checkpointer=InMemorySaver(), durable=False)
-    raise NotImplementedError("Postgres persistence is added in the durability phase")
+
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from psycopg.rows import dict_row
+    from psycopg_pool import AsyncConnectionPool
+
+    pool = AsyncConnectionPool(
+        database_url,
+        min_size=1,
+        max_size=20,
+        # autocommit + no prepared statements: required by the checkpointer and safe behind poolers.
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        open=False,
+    )
+    await pool.open(wait=True, timeout=30)
+    stack.push_async_callback(pool.close)
+    checkpointer = AsyncPostgresSaver(pool)
+    await checkpointer.setup()
+    store = PostgresStore(pool)
+    await store.setup()
+    log.info("durable persistence enabled (Postgres)")
+    return Persistence(store=store, checkpointer=checkpointer, durable=True)
