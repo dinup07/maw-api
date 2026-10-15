@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import os
+import socket
+import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -35,11 +39,10 @@ def chain(*ids: str) -> list[dict]:
 
 from contextlib import AsyncExitStack  # noqa: E402
 
+import httpx  # noqa: E402
 import pytest  # noqa: E402
 
-from maw.connectors import ConnectionRegistry  # noqa: E402
-from maw.engine.models import ModelRegistry  # noqa: E402
-from maw.engine.nodes import EngineContext  # noqa: E402
+from maw.api.app import build_engine_context  # noqa: E402
 from maw.runtime import Catalog, RunService, open_persistence  # noqa: E402
 from maw.settings import Settings  # noqa: E402
 
@@ -56,17 +59,6 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
     return Settings(**values)
 
 
-def build_engine_context(settings: Settings) -> EngineContext:
-    # Replaced by maw.api.app.build_engine_context once the API layer lands.
-    connections = ConnectionRegistry.from_file(settings.connections_file, settings.allowed_outbound_hosts)
-    return EngineContext(
-        connections=connections,
-        models=ModelRegistry(connections, allow_inline_api_keys=settings.allow_inline_api_keys),
-        default_max_tool_calls=settings.default_max_tool_calls,
-        default_max_node_visits=settings.default_max_node_visits,
-    )
-
-
 async def build_service(settings: Settings, stack: AsyncExitStack) -> RunService:
     load_function_modules(settings.function_modules)
     ctx = build_engine_context(settings)
@@ -75,6 +67,7 @@ async def build_service(settings: Settings, stack: AsyncExitStack) -> RunService
     catalog = Catalog(persistence.store, validator=lambda definition: service.validate(definition))
     service = RunService(settings, ctx, persistence, catalog)
     await catalog.load(settings.workflows_dir)
+    stack.push_async_callback(ctx.a2a.aclose)
     stack.push_async_callback(service.shutdown)
     return service
 
@@ -83,3 +76,86 @@ async def build_service(settings: Settings, stack: AsyncExitStack) -> RunService
 async def service(tmp_path):
     async with AsyncExitStack() as stack:
         yield await build_service(make_settings(tmp_path, workflows_dir=None), stack)
+
+
+@pytest.fixture
+async def live_service(tmp_path, connections_file):
+    async with AsyncExitStack() as stack:
+        yield await build_service(make_settings(tmp_path, connections_file=connections_file), stack)
+
+
+@pytest.fixture
+def database_url():
+    url = os.environ.get("MAW_TEST_DATABASE_URL")
+    if not url:
+        pytest.skip("MAW_TEST_DATABASE_URL is not set")
+    return url
+
+
+# --------------------------------------------------------------------------------------------------
+# Mock services (real subprocesses)
+# --------------------------------------------------------------------------------------------------
+
+
+def free_port() -> int:
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _spawn(args: list[str], probe_url: str, timeout: float = 30) -> subprocess.Popen:
+    """Start a mock from the repo root and wait until it answers (any of 200/404/405/406)."""
+    proc = subprocess.Popen(
+        [sys.executable, *args], cwd=REPO_ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+    )
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            raise RuntimeError(f"{args[0]} exited early: {proc.stderr.read().decode()[-2000:]}")
+        try:
+            if httpx.get(probe_url, timeout=1).status_code in (200, 404, 405, 406):
+                return proc
+        except httpx.HTTPError:
+            pass
+        time.sleep(0.1)
+    proc.kill()
+    raise RuntimeError(f"{args[0]} did not start within {timeout}s")
+
+
+def _stop(proc: subprocess.Popen) -> None:
+    proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+
+
+@pytest.fixture(scope="session")
+def mcp_url():
+    port = free_port()
+    url = f"http://127.0.0.1:{port}/mcp"
+    proc = _spawn(["mocks/mcp_kb_server.py", "--host", "127.0.0.1", "--port", str(port)], url)
+    yield url
+    _stop(proc)
+
+
+@pytest.fixture(scope="session")
+def billing_url():
+    port = free_port()
+    url = f"http://127.0.0.1:{port}"
+    proc = _spawn(
+        ["mocks/a2a_billing_agent.py", "--host", "127.0.0.1", "--port", str(port), "--public-url", url],
+        f"{url}/.well-known/agent-card.json",
+    )
+    yield url
+    _stop(proc)
+
+
+@pytest.fixture
+def connections_file(tmp_path, mcp_url, billing_url) -> Path:
+    path = tmp_path / "connections.yaml"
+    path.write_text(
+        f"mcp_servers:\n  kb:\n    url: {mcp_url}\nagents:\n  billing:\n    url: {billing_url}\n"
+        "    description: Answers questions about invoices, charges and refunds.\n"
+    )
+    return path
