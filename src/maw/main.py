@@ -8,23 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import yaml
-
+from .connectors import ConnectionRegistry
 from .functions import function_names, load_function_modules
 from .schema import WorkflowDefinition, WorkflowValidationError, parse_workflow, validate_graph
 from .settings import get_settings
-
-
-def _connection_names(path: Path | None) -> tuple[list[str], list[str]]:
-    """Names of the MCP servers and agents in the server-side connections file.
-
-    Only the names are needed to validate references; the full registry (secret resolution,
-    allowlist) lives in ``maw.connectors``.
-    """
-    if path is None or not path.is_file():
-        return [], []
-    data = yaml.safe_load(path.read_text()) or {}
-    return list(data.get("mcp_servers") or {}), list(data.get("agents") or {})
 
 
 def _with_default_id(raw: Any, stem: str) -> Any:
@@ -38,7 +25,8 @@ def _with_default_id(raw: Any, stem: str) -> Any:
 def cmd_validate(files: list[str]) -> int:
     settings = get_settings()
     load_function_modules(settings.function_modules)
-    mcp_servers, agents = _connection_names(settings.connections_file)
+    registry = ConnectionRegistry.from_file(settings.connections_file, settings.allowed_outbound_hosts)
+    mcp_servers, agents = list(registry.mcp_servers), list(registry.agents)
     functions = function_names()
     failed = 0
     for name in files:
