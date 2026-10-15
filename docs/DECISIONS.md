@@ -20,3 +20,20 @@ Choices made where the spec is silent or ambiguous. Newest last.
    `max_iterations` have native equivalents).
 7. **The function registry and built-ins were built in Phase 1** (the spec schedules them for
    Phase 2) because `maw validate` needs the function names to check references.
+8. **The connection registry was built in Phase 2** (scheduled for Phase 4 in the spec), because
+   the model registry needs `check_url` and `resolve_secrets`. It makes no network calls.
+9. **Path resolution refuses `_`-prefixed attribute names** (e.g. `messages.0.__class__` → None).
+   The spec's `getattr` fallback exists for message fields like `content`; blocking private and
+   dunder attributes keeps caller-supplied paths from reaching interpreter internals.
+10. **Any exception while constructing a provider model becomes `ModelConfigError`**, not just
+    `ImportError`/`ValueError`: provider SDKs raise their own types for missing credentials
+    (e.g. `openai.OpenAIError`), which are still configuration errors.
+11. **`RunService` tracks "active" executions separately from live tasks.** An execution leaves the
+    active set just before its final save, so a client that resumes the moment a stream ends (SSE
+    or A2A) is not refused with "already running" while the finished task is being cleaned up.
+    Subscribers are detached at the same point, so a resume's new subscription can never be closed
+    by the previous execution.
+12. **Failed runs keep `trace: []`**, as in the spec (§16.4 reads the trace from the final
+    snapshot only). Recording the partial trace of a failed run is a candidate improvement.
+13. **`EngineContext.mcp`/`a2a` default to `None`** until the connectors land; the `mcp`/`a2a`
+    handlers and MCP/agent LLM tools are already written against the spec'd connector API.
