@@ -37,3 +37,14 @@ Choices made where the spec is silent or ambiguous. Newest last.
     snapshot only). Recording the partial trace of a failed run is a candidate improvement.
 13. **`EngineContext.mcp`/`a2a` default to `None`** until the connectors land; the `mcp`/`a2a`
     handlers and MCP/agent LLM tools are already written against the spec'd connector API.
+14. **The MCP mock annotates tool returns as `dict[str, Any]`.** With mcp 1.30, FastMCP only emits
+    `structuredContent` when it can derive an output schema; a bare `dict` annotation yields text
+    only. MAW still falls back to parsing JSON text for servers that don't send structured content.
+15. **Connector failures get readable, typed errors.** Transport failures inside MCP sessions arrive
+    wrapped in anyio `ExceptionGroup`s; MAW unwraps them into `McpToolError("MCP server 'x' call
+    failed: …")` / `"… unreachable: …"`. A2A failures become `A2ACallError`, worded "unreachable"
+    when an `httpx.TransportError` is in the cause chain and "call failed" otherwise.
+16. **A2A data parts are protobuf `Struct`s, so integers come back as floats** (`1` → `1.0`).
+    MAW passes them through unchanged rather than guessing which floats were meant as integers.
+17. **`build_engine_context` lives in `maw/api/app.py` from Phase 3**, ahead of the rest of the API
+    layer, so tests and the future app share one wiring function.

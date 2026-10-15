@@ -17,6 +17,8 @@ from ...observability.logging import bind, node_id_var
 from ...observability.tracing import span
 
 if TYPE_CHECKING:
+    from ...connectors.a2a_client import A2AConnector
+    from ...connectors.mcp_client import McpConnector
     from ...connectors.registry import ConnectionRegistry
     from ...schema.workflow import WorkflowDefinition
     from ..models import ModelRegistry
@@ -30,8 +32,8 @@ class EngineContext:
 
     connections: ConnectionRegistry
     models: ModelRegistry
-    mcp: Any = None  # McpConnector (maw.connectors.mcp_client)
-    a2a: Any = None  # A2AConnector (maw.connectors.a2a_client)
+    mcp: McpConnector | None = None
+    a2a: A2AConnector | None = None
     default_max_tool_calls: int = 8
     default_max_node_visits: int = 10
 
