@@ -48,3 +48,14 @@ Choices made where the spec is silent or ambiguous. Newest last.
     MAW passes them through unchanged rather than guessing which floats were meant as integers.
 17. **`build_engine_context` lives in `maw/api/app.py` from Phase 3**, ahead of the rest of the API
     layer, so tests and the future app share one wiring function.
+18. **MCP/A2A failures on the connection-discovery endpoints return 502.** The spec's error table
+    doesn't cover them; without a mapping they would surface as 500s. Inside a run they still fail
+    the run (HTTP 200, `status: failed`).
+19. **A mounted A2A agent reads its workflow from the catalog on every request.** Re-registering an
+    exposed workflow through the API therefore updates both its behaviour and its agent card (via
+    the SDK's `card_modifier` hook) without remounting routes; deleting it makes new tasks fail with
+    "no longer available" instead of running a stale definition.
+20. **A2A agent URLs are resolved like MCP URLs**, so `${env:…}` (trusted file) and `${secret:…}` work
+    in `agents.*.url`. Phase 3 shipped without this; it was caught by the Phase 4 manual smoke test.
+21. **`/ready` probes the store with `list_runs(limit=1)`**; the `Store` protocol has no dedicated
+    ping, and this exercises the same path real requests use.
