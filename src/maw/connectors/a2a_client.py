@@ -18,7 +18,7 @@ from ..observability import metrics
 from ..observability.tracing import span
 from ..schema.workflow import AgentSpec
 from .mcp_client import describe_error
-from .registry import ConnectionRegistry, Resolved, resolve_secrets_deep
+from .registry import ConnectionRegistry, Resolved, resolve_secrets, resolve_secrets_deep
 
 STATE_NAMES = {
     TaskState.TASK_STATE_SUBMITTED: "submitted",
@@ -118,10 +118,14 @@ class A2AConnector:
         self._clients: dict[str, httpx.AsyncClient] = {}
         self._cards: dict[str, tuple[float, AgentCard]] = {}
 
+    @staticmethod
+    def _url(agent: Resolved[AgentSpec]) -> str:
+        return resolve_secrets(agent.spec.url, trusted=agent.trusted).rstrip("/")
+
     def _http(self, agent: Resolved[AgentSpec]) -> httpx.AsyncClient:
         headers = resolve_secrets_deep(agent.spec.headers, trusted=agent.trusted)
         timeout = agent.spec.timeout_s or self.default_timeout_s
-        key = _hash(agent.spec.url, headers, timeout)
+        key = _hash(self._url(agent), headers, timeout)
         client = self._clients.get(key)
         if client is None:
             client = httpx.AsyncClient(headers=headers, timeout=httpx.Timeout(timeout, connect=10))
@@ -130,13 +134,14 @@ class A2AConnector:
 
     async def card(self, agent: Resolved[AgentSpec]) -> AgentCard:
         headers = resolve_secrets_deep(agent.spec.headers, trusted=agent.trusted)
-        key = _hash(agent.spec.url, agent.spec.card_path, headers)
+        url = self._url(agent)
+        key = _hash(url, agent.spec.card_path, headers)
         cached = self._cards.get(key)
         if cached is not None and self.card_ttl_s > 0 and time.monotonic() - cached[0] <= self.card_ttl_s:
             return cached[1]
         with span("a2a.get_card", agent=agent.name):
             try:
-                resolver = A2ACardResolver(self._http(agent), agent.spec.url.rstrip("/"))
+                resolver = A2ACardResolver(self._http(agent), url)
                 card = await resolver.get_agent_card(relative_card_path=agent.spec.card_path)
             except Exception as e:
                 raise A2ACallError(f"agent '{agent.name}' unreachable: {describe_error(e)}") from e

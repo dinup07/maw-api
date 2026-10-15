@@ -265,3 +265,25 @@ async def test_catalog_files_validate_against_live_connections(live_service):
     for path in sorted(WORKFLOWS_DIR.glob("*.json")):
         definition, _ = live_service.resolve(workflow=json.loads(path.read_text()))
         assert definition.id == path.stem
+
+
+async def test_connections_file_env_references_are_resolved(tmp_path, monkeypatch, mcp_url, billing_url):
+    """Regression: ${env:...} in the trusted file must be substituted for both MCP and A2A URLs."""
+    from contextlib import AsyncExitStack
+
+    from conftest import build_service, make_settings
+
+    monkeypatch.setenv("TEST_KB_URL", mcp_url)
+    monkeypatch.delenv("TEST_UNSET_BILLING_URL", raising=False)
+    path = tmp_path / "env-connections.yaml"
+    path.write_text(
+        "mcp_servers:\n  kb:\n    url: ${env:TEST_KB_URL}\n"
+        f"agents:\n  billing:\n    url: ${{env:TEST_UNSET_BILLING_URL:-{billing_url}}}\n"
+    )
+    async with AsyncExitStack() as stack:
+        svc = await build_service(make_settings(tmp_path, connections_file=path), stack)
+        record = await run_catalog(svc, "support_triage", "Was INV-1001 charged twice?")
+        assert record.status == "completed", record.error
+        assert "refund" in record.text
+        record = await run_catalog(svc, "kb_research", "vpn password reset")
+        assert record.output["top_article"] == "Reset your VPN password"
