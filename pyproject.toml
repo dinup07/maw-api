@@ -1,0 +1,56 @@
+[project]
+name = "maw"
+version = "0.1.0"
+description = "MAW - Multi-Agent Workflow runtime: JSON workflows compiled to LangGraph, with MCP, A2A and durable runs."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=1.2,<2",
+    "langchain>=1.4,<2",
+    "langchain-core>=1.4,<2",
+    "langchain-openai",
+    "langchain-anthropic",
+    "langchain-mcp-adapters>=0.3,<0.4",
+    # mcp 2.x breaks langchain-mcp-adapters 0.3.x at import time (see docs/ARCHITECTURE.md "Pin notes").
+    "mcp>=1.30,<2",
+    "a2a-sdk[http-server]>=1.2,<2",
+    "fastapi>=0.115",
+    "uvicorn[standard]",
+    "pydantic>=2.8",
+    "pydantic-settings",
+    "jsonschema",
+    "langgraph-checkpoint-postgres",
+    "psycopg[binary,pool]",
+    "pyyaml>=6",
+    "httpx>=0.28.1",
+    "opentelemetry-sdk",
+    "opentelemetry-exporter-otlp-proto-http",
+    "prometheus-client",
+]
+
+[project.scripts]
+maw = "maw.main:cli"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.11,<0.12"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "ASYNC"]
+ignore = ["E501", "B008"]
