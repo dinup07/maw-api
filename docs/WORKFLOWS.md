@@ -21,6 +21,7 @@ curl -s localhost:8000/v1/workflows/validate -H 'content-type: application/json'
 | `models` | object | `{}` | Named models (below) |
 | `mcp_servers` | object | `{}` | Inline MCP servers (untrusted) |
 | `agents` | object | `{}` | Inline A2A agents (untrusted) |
+| `vector_stores` | object | `{}` | Inline vector stores (untrusted; Qdrant only) — see *Vector stores* |
 | `nodes` | array | required | |
 | `edges` | array | required | |
 | `limits` | object | `{}` | `recursion_limit` (LangGraph supersteps), `max_node_visits` (loop guard default) |
@@ -120,6 +121,7 @@ Results are stored under `nodes.<id>` (a non-object result becomes `{"result": v
 | `tools.mcp` | `[]` | Server names, or `{"server", "allow", "block"}` with exact names or globs; empty `allow` = all, `block` wins. Tools whose names collide across servers become `<server>__<tool>` |
 | `tools.agents` | `[]` | A2A agents the model can call as tools (with a `message` argument) |
 | `tools.functions` | `[]` | Registered local functions |
+| `tools.retrievers` | `[]` | Vector stores the model can search (a `search_<store>` tool returning numbered passages) |
 | `max_tool_calls` | 8 | Budget; when exceeded the model is asked to answer with what it has |
 | `output_schema` | — | JSON Schema of an object → structured output, validated |
 | `recover_text_field` | — | On a schema mismatch, return `{field: raw_output}` instead of failing |
@@ -180,6 +182,38 @@ Builds a result from state without any external call. `null` values are dropped.
   "mapping": { "text": "nodes.billing.text || nodes.general.text", "category": "nodes.classify.category", "source": "'kb'" } }
 ```
 
+### `rag`
+
+Retrieves the passages most similar to a query from a vector store and passes them on.
+
+```json
+{ "id": "retrieve", "type": "rag", "store": "docs", "query": "{{ input }}", "top_k": 4,
+  "min_score": 0.3, "filter": { "team": "input.team" } }
+```
+
+| Field | Default | Meaning |
+|---|---|---|
+| `store` | required | Vector store name (see *Vector stores*) |
+| `query` | run input | Template |
+| `inputs` | `{}` | Named template values |
+| `top_k` | 4 | 1–50 passages |
+| `min_score` | — | Drop passages below this cosine similarity |
+| `filter` | `{}` | Metadata equality filter; values are value expressions |
+| `max_context_chars` | 8000 | Cap on the length of `context` |
+
+Result:
+
+```json
+{ "query": "...", "count": 2,
+  "documents": [{ "id": "annual-leave.md#0", "document_id": "annual-leave.md", "text": "...", "score": 0.52,
+                  "metadata": { "source": "annual-leave.md", "chunk": 0, "chunks": 1 } }],
+  "context": "[1] (annual-leave.md) Full-time staff accrue 24 days ...\n\n[2] (...) ..." }
+```
+
+Use `{{ nodes.retrieve.context }}` in a later prompt; the `(source)` comes from the passage's
+`source`, `title`, `url` or `path` metadata, else its document id. An empty query returns no
+passages without calling the store.
+
 ### `human`
 
 Pauses the run (status `interrupted`) with a prompt. Resume with `POST /v1/runs/{id}/resume`
@@ -188,6 +222,52 @@ Pauses the run (status `interrupted`) with a prompt. Resume with `POST /v1/runs/
 ```json
 { "id": "review", "type": "human", "prompt": "Approve this draft?\n\n{{ nodes.draft.text }}" }
 ```
+
+## Vector stores
+
+Vector stores are named connections. Declare them in `config/connections.yaml` (trusted) or, for
+Qdrant only, inside a workflow (untrusted: URLs are allowlist-checked and only `${secret:…}` works).
+
+```yaml
+vector_stores:
+  docs:                        # internal: pgvector tables in MAW's own Postgres
+    provider: pgvector
+    collection: docs
+    embedding: { provider: google_genai, model: text-embedding-004 }
+  research:                    # external
+    provider: qdrant
+    url: https://xyz.cloud.qdrant.io
+    api_key: ${secret:QDRANT_API_KEY}
+    collection: papers
+    embedding: { provider: openai, model: text-embedding-3-small }
+```
+
+| Field | Notes |
+|---|---|
+| `provider` | `pgvector` (internal by default; needs `MAW_DATABASE_URL`), `qdrant` (external), `memory` (process-local, dev/tests) |
+| `collection` | `[A-Za-z0-9_-]{1,63}` |
+| `embedding` | `{provider, model, base_url?, api_key?, params?}` — any LangChain `init_embeddings` provider (`openai`, `google_genai`, `ollama`, …) or `scripted` |
+| `url` | Qdrant base URL; for `pgvector`, an optional DSN of an external Postgres (connections file only) |
+| `api_key`, `headers`, `timeout_s` | Qdrant credentials and options |
+| `description` | Used as the retriever tool's description |
+
+**One collection, one embedding model.** Vectors from different models aren't comparable, so MAW
+records each collection's embedding model and size and refuses to mix them; to switch models,
+also change `collection` and re-ingest. The `scripted` embedding is keyless keyword hashing for
+demos and tests — it matches shared words, not meaning, and can produce false matches; use a real
+embedding model for anything else.
+
+Filling a store:
+
+```bash
+uv run maw ingest docs handbook/*.md            # .txt/.md/.rst; ids are the file paths
+curl -s localhost:8000/v1/vector-stores/docs/documents -H 'content-type: application/json' \
+  -d '{"documents": [{"id": "vpn", "text": "...", "metadata": {"team": "it", "source": "vpn.md"}}]}'
+```
+
+Documents are split into chunks (`chunk_size` 1000 characters, `chunk_overlap` 150, by paragraph
+then sentence). Re-ingesting a document id replaces all of its chunks. Each chunk's metadata gets
+`document_id`, `chunk` and `chunks` added.
 
 ## Values, paths and templates
 

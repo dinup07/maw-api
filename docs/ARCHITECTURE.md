@@ -13,12 +13,13 @@ flowchart LR
         llm[LLM providers<br/>via init_chat_model]
         mcp[Any MCP server<br/>HTTP / SSE / stdio*]
         agents[Any A2A agent]
+        vdb[External vector DB<br/>Qdrant]
     end
-    pg[(Postgres<br/>runs + checkpoints)]
+    pg[(Postgres<br/>runs + checkpoints<br/>+ pgvector store)]
     otel[OTLP collector<br/>Jaeger / Langfuse]
     app --> maw
     peer --> maw
-    maw --> llm & mcp & agents
+    maw --> llm & mcp & agents & vdb
     maw --> pg
     maw --> otel
 ```
@@ -37,7 +38,7 @@ Lower layers never import upper layers, and nothing under `src/` imports `mocks/
 |---|---|
 | `schema/` | The workflow contract (Pydantic, `extra="forbid"`), reference-format translation, graph validation |
 | `engine/` | State and reducers, the path/template resolver, routing, models, node handlers, the compiler |
-| `connectors/` | Trusted/untrusted connection registry, secrets, host allowlist, MCP and A2A clients |
+| `connectors/` | Trusted/untrusted connection registry, secrets, host allowlist, MCP and A2A clients, embeddings, vector stores (memory, pgvector, Qdrant) |
 | `functions/` | Registry of local functions and the built-ins |
 | `runtime/` | Run records and stores (memory, Postgres), the catalog, persistence, `RunService` |
 | `a2a_server/` | Agent cards, mounting, and the executor that runs workflows for A2A callers |
@@ -142,6 +143,7 @@ operator-controlled (**trusted**).
 |---|---|
 | A submitted workflow exfiltrates server secrets | Only `${secret:X}` → `MAW_SECRET_X`; `${env:…}` is rejected outside the trusted file |
 | A submitted workflow runs commands on the host | `stdio` MCP servers only from the trusted file |
+| A submitted workflow reads or writes databases it shouldn't | `pgvector` and `memory` vector stores only from the trusted file; inline stores must be Qdrant (allowlisted); ingestion endpoints only manage trusted stores |
 | SSRF / calls to arbitrary hosts | `MAW_ALLOWED_OUTBOUND_HOSTS` checked for MCP URLs, A2A URLs, **the interface URLs inside A2A agent cards**, and model `base_url`s |
 | Keys pasted into workflow JSON | Literal `api_key` rejected unless `MAW_ALLOW_INLINE_API_KEYS=true` |
 | Code injection via the calculator | AST whitelist, never `eval`; bounded exponent and length |
@@ -163,11 +165,22 @@ deployments.
   `maw_node_duration_seconds`, `maw_node_retries_total`, `maw_llm_calls_total`,
   `maw_llm_call_duration_seconds`, `maw_llm_tokens_total`, `maw_mcp_calls_total`,
   `maw_mcp_call_duration_seconds`, `maw_a2a_calls_total`, `maw_a2a_call_duration_seconds`,
-  `maw_graph_cache_total`, `maw_graph_compile_seconds`. Labels are low-cardinality.
+  `maw_graph_cache_total`, `maw_graph_compile_seconds`, `maw_vector_queries_total`,
+  `maw_vector_query_duration_seconds`, `maw_vector_upserts_total`. Labels are low-cardinality.
 - **Traces:** spans `workflow.run`, `node.<id>`, `llm.invoke`, `llm.tool_call`, `mcp.list_tools`,
-  `mcp.call_tool`, `a2a.get_card`, `a2a.send_message`. For Langfuse, set
+  `mcp.call_tool`, `a2a.get_card`, `a2a.send_message`, `vector.search`, `vector.upsert`. For Langfuse, set
   `OTEL_EXPORTER_OTLP_ENDPOINT=<langfuse>/api/public/otel` and
   `OTEL_EXPORTER_OTLP_HEADERS=Authorization=Basic <base64(pk:sk)>`.
+
+## Retrieval
+
+`connectors/vectorstores.py` defines one backend interface (info, create, upsert, search,
+delete_document, count) with three implementations. `VectorStoreConnector` adds chunking, batched
+embedding, metrics and the embedding-space guard. The internal `pgvector` store keeps every
+collection in one table (`maw_vectors`) with a partial HNSW index per collection over
+`embedding::vector(<dims>)`; collection metadata (embedding model, dimensions) lives in
+`maw_vector_collections`. Qdrant is reached over its REST API (no SDK), with deterministic UUIDv5
+point ids. New backends (Pinecone, Chroma, Weaviate, …) implement the same interface.
 
 ## Future work (seams kept, not built)
 

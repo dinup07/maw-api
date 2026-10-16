@@ -16,8 +16,8 @@ When `MAW_API_KEYS` is set (a JSON list), every request needs `X-API-Key: <key>`
 | 422 | Invalid workflow (schema or graph), or no/both of `workflow` and `workflow_id` | `{"detail": "invalid workflow", "errors": [...]}` |
 | 404 | Unknown run, workflow or connection | `{"detail": "..."}` |
 | 409 | Run in the wrong state (resume a non-paused run, cancel a finished one) | `{"detail": "..."}` |
-| 400 | Bad connection or model configuration (e.g. host not allowlisted) | `{"detail": "..."}` |
-| 502 | An MCP server or A2A agent failed on a connection-discovery endpoint | `{"detail": "..."}` |
+| 400 | Bad connection, model, embedding or vector-store configuration (e.g. host not allowlisted, mixed embedding models) | `{"detail": "..."}` |
+| 502 | An MCP server, A2A agent or vector store failed on a discovery or vector-store endpoint | `{"detail": "..."}` |
 | 403 | Workflow registration disabled | `{"detail": "..."}` |
 
 Failures **during** a run (a node error, an unreachable agent) are not HTTP errors: the response is
@@ -113,6 +113,18 @@ Sequence: `run_created` (`data.warnings`) → `run_started` → `node_completed`
 | `GET /v1/connections` | Server-side connections without headers or env: `{"mcp_servers": {name: {transport, url, command}}, "agents": {name: {url, description}}}` |
 | `GET /v1/connections/mcp/{name}/tools` | `[{"name", "description", "input_schema"}]` |
 | `GET /v1/connections/agents/{name}/card` | The agent card as JSON |
+
+## Vector stores
+
+Manage the stores declared in the server-side connections file.
+
+| Endpoint | Notes |
+|---|---|
+| `GET /v1/vector-stores` | `{name: {provider, collection, url, embedding, description}}` (no credentials) |
+| `GET /v1/vector-stores/{name}` | The same, plus `chunks` (stored chunk count) |
+| `POST /v1/vector-stores/{name}/documents` | Body `{"documents": [{"id"?, "text", "metadata"?}], "chunk_size": 1000, "chunk_overlap": 150}` (1–1000 documents) → `{"documents", "chunks", "document_ids"}`. Re-ingesting an id replaces it |
+| `POST /v1/vector-stores/{name}/query` | Body `{"query", "top_k": 4, "min_score"?, "filter": {}}` → the same result as a `rag` node |
+| `DELETE /v1/vector-stores/{name}/documents/{document_id}` | → `{"document_id", "deleted_chunks"}`; 404 if absent. Ids may contain `/` |
 
 ## A2A agents
 

@@ -110,6 +110,21 @@ curl -s $B/a2a/shouty/.well-known/agent-card.json
 curl -s -X DELETE $B/v1/workflows/shouty -o /dev/null -w '%{http_code}\n'   # 204
 ```
 
+## Retrieval (RAG)
+
+Needs the internal pgvector store, i.e. `MAW_DATABASE_URL` (the Compose stack has it).
+
+```bash
+uv run maw ingest docs examples/docs/*.md                 # or the API:
+curl -s $B/v1/vector-stores/docs/documents -H "$J" \
+  -d '{"documents": [{"id": "wifi", "text": "The guest wifi password is on your badge.", "metadata": {"source": "wifi.md"}}]}'
+curl -s $B/v1/vector-stores
+curl -s $B/v1/vector-stores/docs/query -H "$J" -d '{"query": "expense receipts", "top_k": 2}'
+curl -s $B/v1/runs -H "$J" -d "{\"workflow\": $(cat examples/rag_qa.json), \"input\": \"how many days of annual leave do I get\"}"
+curl -s $B/v1/runs -H "$J" -d "{\"workflow\": $(cat examples/rag_qa_gemini.json), \"input\": \"how do I reset my vpn password\"}"   # GOOGLE_API_KEY
+curl -s -X DELETE $B/v1/vector-stores/docs/documents/wifi
+```
+
 ## Connections
 
 ```bash

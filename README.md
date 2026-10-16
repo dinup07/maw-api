@@ -8,6 +8,8 @@ executed. Nodes can:
   agents** or **local Python functions**, and optionally return **structured JSON**;
 - call one **MCP tool** deterministically;
 - call an external **A2A agent** (Agent-to-Agent protocol 1.0);
+- **retrieve context** from a vector store (**RAG**): the internal pgvector store in MAW's own
+  Postgres, or an external Qdrant;
 - run a **local function**, **transform** state, or **pause for a human** and resume later.
 
 Edges can be conditional, fan out in parallel, join, and loop (bounded). Runs are checkpointed in
@@ -80,6 +82,18 @@ them with `POST /v1/workflows`, or send them inline with each run. The catalog s
 | `kb_research` | Parallel fan-out (MCP search + local function) and a deferred join |
 | `approval` | Human-in-the-loop with a bounded revision loop |
 | `concierge` | One LLM that uses MCP tools and an A2A agent as tools |
+
+### Retrieval (RAG)
+
+```bash
+uv run maw ingest docs examples/docs/*.md           # needs MAW_DATABASE_URL (internal pgvector store)
+curl -s localhost:8000/v1/runs -H 'content-type: application/json' \
+  -d "{\"workflow\": $(cat examples/rag_qa.json), \"input\": \"how many days of annual leave do I get\"}"
+```
+
+`examples/rag_qa_gemini.json` does the same with Gemini writing the answer from the retrieved
+passages. Configure stores (and real embedding models) under `vector_stores` in
+`config/connections.yaml`.
 
 See [docs/WORKFLOWS.md](docs/WORKFLOWS.md) for the authoring reference,
 [docs/API.md](docs/API.md) for the HTTP API, [examples/README.md](examples/README.md) for a curl

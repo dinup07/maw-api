@@ -67,3 +67,26 @@ Choices made where the spec is silent or ambiguous. Newest last.
     address.** FastMCP computes that protection at construction time for its default host
     (127.0.0.1), so inside Compose it rejected `Host: mock-mcp:8001` with 421. Found by the Compose
     end-to-end run; the mock stays protected when bound to localhost.
+24. **RAG is a seventh node type (`rag`), requested after v1.** Internal store: pgvector inside
+    MAW's own Postgres (no extra service); external: Qdrant; plus `memory` for dev/tests. The LLM
+    node can also search stores itself (`tools.retrievers`).
+25. **Inline vector stores may only be Qdrant.** pgvector reaches a database (MAW's own, or a DSN
+    with credentials) and memory is process-wide state, so both are operator decisions made in the
+    connections file. Ingestion endpoints only manage trusted stores.
+26. **pgvector without fixed dimensions + partial HNSW indexes.** One `maw_vectors` table holds all
+    collections in an untyped `vector` column; each collection gets
+    `CREATE INDEX … USING hnsw ((embedding::vector(D)) vector_cosine_ops) WHERE collection = …`,
+    and searches order by the same expression so the index applies.
+27. **Collections are bound to one embedding space.** pgvector and memory record the embedding
+    model and dimensions; Qdrant records only the dimensions. Mismatches are refused rather than
+    returning meaningless similarities.
+28. **Qdrant over REST (httpx), not `qdrant-client`.** Five endpoints are needed; this keeps the
+    dependency tree small. Point ids are UUIDv5 of `collection:chunk_id`, so re-ingestion is
+    idempotent.
+29. **Chunking is built in** (paragraph → sentence → hard split, word-boundary overlap) instead of
+    adding `langchain-text-splitters`; it covers plain text and Markdown.
+30. **`scripted` embeddings** (hashed bag of words with English stop words removed) make RAG
+    runnable and testable without keys. Being keyword hashing, they can produce false matches;
+    documented as demo-only.
+31. **Example RAG workflows live in `examples/`, not the catalog**, so the spec's catalog of five
+    workflows (and its acceptance checks) stays as specified.

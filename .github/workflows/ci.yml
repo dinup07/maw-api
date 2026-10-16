@@ -69,6 +69,18 @@ jobs:
           curl -sf localhost:8000/v1/runs -H 'content-type: application/json' \
             -d '{"workflow_id": "support_triage", "input": "Was INV-1001 charged twice?"}' | tee response.json
           grep -q refund response.json
+      - name: End-to-end RAG (ingest into internal pgvector, then retrieve)
+        run: |
+          python3 - <<'PY' > ingest.json
+          import json, pathlib
+          docs = [{"id": p.name, "text": p.read_text(), "metadata": {"source": p.name}}
+                  for p in sorted(pathlib.Path("examples/docs").glob("*.md"))]
+          print(json.dumps({"documents": docs}))
+          PY
+          curl -sf localhost:8000/v1/vector-stores/docs/documents -H 'content-type: application/json' -d @ingest.json
+          python3 -c "import json; print(json.dumps({'workflow': json.load(open('examples/rag_qa.json')), 'input': 'how many days of annual leave do I get'}))" > rag.json
+          curl -sf localhost:8000/v1/runs -H 'content-type: application/json' -d @rag.json | tee rag_response.json
+          grep -q annual-leave.md rag_response.json
       - if: failure()
         run: docker compose logs
       - if: always()
