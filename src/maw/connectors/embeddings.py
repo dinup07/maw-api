@@ -15,6 +15,14 @@ from ..schema.workflow import EmbeddingSpec
 from .registry import ConnectionError_, ConnectionRegistry, resolve_secrets
 
 _WORD = re.compile(r"[a-z0-9]+")
+# Words that carry no topic; without this, any two English texts look a little similar.
+_STOPWORDS = frozenset(
+    "the and for are but not you your yours with what when where which who whom why how this that these "
+    "those there their them they then than from into onto over under was were been being have has had "
+    "does did doing can could should would will shall may might must about above after again all any "
+    "because before below between both each few more most other some such only own same too very just "
+    "our ours out off once here also get got its it's one two per via ever".split()
+)
 
 
 class EmbeddingConfigError(ConnectionError_):
@@ -33,7 +41,7 @@ class ScriptedEmbeddings(Embeddings):
     def _embed(self, text: str) -> list[float]:
         vector = [0.0] * self.dimensions
         for word in _WORD.findall(text.lower()):
-            if len(word) < 3:
+            if len(word) < 3 or word in _STOPWORDS:
                 continue
             digest = hashlib.sha256(word.encode()).digest()
             index = int.from_bytes(digest[:4], "big") % self.dimensions

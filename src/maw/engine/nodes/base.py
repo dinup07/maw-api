@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from ...connectors.a2a_client import A2AConnector
     from ...connectors.mcp_client import McpConnector
     from ...connectors.registry import ConnectionRegistry
+    from ...connectors.vectorstores import VectorStoreConnector
     from ...schema.workflow import WorkflowDefinition
     from ..models import ModelRegistry
 
@@ -34,6 +35,7 @@ class EngineContext:
     models: ModelRegistry
     mcp: McpConnector | None = None
     a2a: A2AConnector | None = None
+    vectors: VectorStoreConnector | None = None
     default_max_tool_calls: int = 8
     default_max_node_visits: int = 10
 

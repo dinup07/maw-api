@@ -81,6 +81,7 @@ class RunService:
             known_mcp_servers=self.ctx.connections.mcp_servers,
             known_agents=self.ctx.connections.agents,
             known_functions=function_names(),
+            known_vector_stores=self.ctx.connections.vector_stores,
         )
 
     def resolve(

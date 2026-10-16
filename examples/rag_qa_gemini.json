@@ -1,0 +1,20 @@
+{
+  "id": "rag_qa_gemini",
+  "description": "Retrieval-augmented generation with Gemini: retrieve passages, then let the model answer only from them, citing sources. Needs GOOGLE_API_KEY.",
+  "models": {
+    "gemini": { "provider": "google_genai", "model": "gemini-2.5-flash", "temperature": 0 }
+  },
+  "nodes": [
+    { "id": "retrieve", "type": "rag", "store": "docs", "top_k": 4, "write_output": false },
+    {
+      "id": "answer", "type": "llm", "model": "gemini",
+      "system_prompt": "Answer the employee's question using only the numbered passages. Cite passages like [1]. If the passages don't contain the answer, say you don't know.",
+      "user_message": "Passages:\n{{ nodes.retrieve.context }}\n\nQuestion: {{ input }}"
+    }
+  ],
+  "edges": [
+    { "source": "start", "target": "retrieve" },
+    { "source": "retrieve", "target": "answer" },
+    { "source": "answer", "target": "end" }
+  ]
+}

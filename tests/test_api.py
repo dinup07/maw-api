@@ -4,47 +4,19 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
-import time
 import uuid
 from pathlib import Path
 
 import httpx
 import pytest
-import uvicorn
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.helpers import get_text_parts, new_text_part
 from a2a.types import Message, Role, SendMessageRequest, TaskState
-from conftest import free_port, make_settings
-
-from maw.api.app import create_app
+from conftest import ServerThread, free_port, make_settings
 
 # --------------------------------------------------------------------------------------------------
 # Server fixtures
 # --------------------------------------------------------------------------------------------------
-
-
-class ServerThread:
-    def __init__(self, settings):
-        self.app = create_app(settings)
-        self.server = uvicorn.Server(
-            uvicorn.Config(self.app, host="127.0.0.1", port=settings.port, log_config=None, lifespan="on")
-        )
-        self.thread = threading.Thread(target=self.server.run, daemon=True)
-        self.url = f"http://127.0.0.1:{settings.port}"
-
-    def __enter__(self) -> ServerThread:
-        self.thread.start()
-        deadline = time.monotonic() + 30
-        while not self.server.started:
-            if time.monotonic() > deadline or not self.thread.is_alive():
-                raise RuntimeError("API server did not start")
-            time.sleep(0.05)
-        return self
-
-    def __exit__(self, *exc) -> None:
-        self.server.should_exit = True
-        self.thread.join(timeout=15)
 
 
 def _write_connections(directory: Path, mcp_url: str, billing_url: str) -> Path:

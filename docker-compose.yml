@@ -6,7 +6,7 @@ x-maw-image: &maw-image
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16   # Postgres 16 with the pgvector extension (internal vector store)
     environment:
       POSTGRES_USER: maw
       POSTGRES_PASSWORD: maw
@@ -60,8 +60,17 @@ services:
       BILLING_AGENT_URL: http://mock-a2a:9001
       MAW_TRACING_ENABLED: ${MAW_TRACING_ENABLED:-false}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
     ports:
       - "8000:8000"
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    profiles: ["qdrant"]
+    volumes:
+      - qdrant:/qdrant/storage
+    ports:
+      - "6333:6333"
 
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
@@ -74,3 +83,4 @@ services:
 
 volumes:
   pgdata:
+  qdrant:

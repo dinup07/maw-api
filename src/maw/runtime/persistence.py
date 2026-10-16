@@ -19,6 +19,7 @@ class Persistence:
     store: Store
     checkpointer: Any
     durable: bool
+    pool: Any = None  # the Postgres pool, shared with the internal pgvector store
 
 
 async def open_persistence(database_url: str | None, stack: AsyncExitStack) -> Persistence:
@@ -47,4 +48,4 @@ async def open_persistence(database_url: str | None, stack: AsyncExitStack) -> P
     store = PostgresStore(pool)
     await store.setup()
     log.info("durable persistence enabled (Postgres)")
-    return Persistence(store=store, checkpointer=checkpointer, durable=True)
+    return Persistence(store=store, checkpointer=checkpointer, durable=True, pool=pool)

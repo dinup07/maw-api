@@ -8,7 +8,13 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from ..connectors import A2ACallError, ConnectionError_, McpToolError
+from ..connectors import (
+    A2ACallError,
+    ConnectionError_,
+    McpToolError,
+    VectorStoreError,
+    VectorStoreUnavailable,
+)
 from ..engine.models import ModelConfigError
 from ..runtime import RunNotFound, RunStateError
 from ..schema import WorkflowValidationError
@@ -44,3 +50,6 @@ def install_error_handlers(app: FastAPI) -> None:
     # Only reachable from the connection-discovery endpoints; inside a run these fail the run.
     app.add_exception_handler(McpToolError, _bad_gateway)
     app.add_exception_handler(A2ACallError, _bad_gateway)
+    # Order matters: Starlette picks the handler for the most specific class in the MRO.
+    app.add_exception_handler(VectorStoreUnavailable, _bad_gateway)
+    app.add_exception_handler(VectorStoreError, _bad_request)

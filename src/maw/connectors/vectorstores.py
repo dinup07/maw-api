@@ -29,7 +29,11 @@ EMBED_BATCH = 64
 
 
 class VectorStoreError(RuntimeError):
-    """A vector store is misconfigured, unreachable, or holds an incompatible collection."""
+    """A vector store is misconfigured or holds an incompatible collection."""
+
+
+class VectorStoreUnavailable(VectorStoreError):
+    """A vector store backend could not be reached or failed."""
 
 
 @dataclass(frozen=True)
@@ -304,11 +308,13 @@ class QdrantBackend:
         try:
             resp = await self.http.request(method, path, json=body)
         except httpx.HTTPError as e:
-            raise VectorStoreError(f"qdrant unreachable: {describe_error(e)}") from e
+            raise VectorStoreUnavailable(f"qdrant unreachable: {describe_error(e)}") from e
         if missing_ok and resp.status_code == 404:
             return None
         if resp.status_code >= 400:
-            raise VectorStoreError(f"qdrant {method} {path} failed ({resp.status_code}): {resp.text[:300]}")
+            raise VectorStoreUnavailable(
+                f"qdrant {method} {path} failed ({resp.status_code}): {resp.text[:300]}"
+            )
         return resp.json().get("result")
 
     async def info(self, collection: str) -> CollectionInfo | None:
@@ -445,7 +451,7 @@ class VectorStoreConnector:
                 try:
                     await pool.open(wait=True, timeout=15)
                 except Exception as e:
-                    raise VectorStoreError(
+                    raise VectorStoreUnavailable(
                         f"vector store '{store.name}' unreachable: {describe_error(e)}"
                     ) from e
                 self._external_pools.append(pool)

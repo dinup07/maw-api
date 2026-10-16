@@ -27,6 +27,7 @@ def cmd_validate(files: list[str]) -> int:
     load_function_modules(settings.function_modules)
     registry = ConnectionRegistry.from_file(settings.connections_file, settings.allowed_outbound_hosts)
     mcp_servers, agents = list(registry.mcp_servers), list(registry.agents)
+    vector_stores = list(registry.vector_stores)
     functions = function_names()
     failed = 0
     for name in files:
@@ -34,7 +35,13 @@ def cmd_validate(files: list[str]) -> int:
         try:
             raw = _with_default_id(json.loads(path.read_text()), path.stem)
             wf, warnings = parse_workflow(raw)
-            validate_graph(wf, known_mcp_servers=mcp_servers, known_agents=agents, known_functions=functions)
+            validate_graph(
+                wf,
+                known_mcp_servers=mcp_servers,
+                known_agents=agents,
+                known_functions=functions,
+                known_vector_stores=vector_stores,
+            )
         except (OSError, json.JSONDecodeError) as e:
             failed += 1
             print(f"FAIL  {name}\n      - {e}")
@@ -49,6 +56,64 @@ def cmd_validate(files: list[str]) -> int:
         for warning in warnings:
             print(f"      warning: {warning}")
     return 1 if failed else 0
+
+
+INGEST_SUFFIXES = (".txt", ".md", ".markdown", ".rst")
+
+
+async def _ingest(store_name: str, paths: list[Path], chunk_size: int, chunk_overlap: int) -> int:
+    from contextlib import AsyncExitStack
+
+    from .api.app import build_engine_context
+    from .runtime import open_persistence
+
+    settings = get_settings()
+    ctx = build_engine_context(settings)
+    async with AsyncExitStack() as stack:
+        stack.push_async_callback(ctx.vectors.aclose)
+        stack.push_async_callback(ctx.a2a.aclose)
+        if store_name not in ctx.connections.vector_stores:
+            known = ", ".join(sorted(ctx.connections.vector_stores)) or "none"
+            print(f"unknown vector store '{store_name}' (configured: {known})", file=sys.stderr)
+            return 1
+        store = ctx.connections.vector_store(store_name)
+        if store.spec.provider == "pgvector" and not store.spec.url:
+            persistence = await open_persistence(settings.database_url, stack)
+            if persistence.pool is not None:
+                ctx.vectors.attach_pool(persistence.pool)
+        documents = [
+            {
+                "id": path.as_posix(),
+                "text": path.read_text(encoding="utf-8"),
+                "metadata": {"source": path.name},
+            }
+            for path in paths
+        ]
+        result = await ctx.vectors.add_documents(
+            store, documents, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+        )
+        total = await ctx.vectors.count(store)
+    print(
+        f"ingested {result['documents']} documents ({result['chunks']} chunks) into '{store_name}'; {total} chunks total"
+    )
+    return 0
+
+
+def cmd_ingest(store: str, files: list[str], chunk_size: int, chunk_overlap: int) -> int:
+    import asyncio
+
+    from .connectors import ConnectionError_, VectorStoreError
+
+    paths = [Path(f) for f in files]
+    bad = [p for p in paths if not p.is_file() or p.suffix.lower() not in INGEST_SUFFIXES]
+    if bad:
+        print(f"not a readable {'/'.join(INGEST_SUFFIXES)} file: {', '.join(map(str, bad))}", file=sys.stderr)
+        return 1
+    try:
+        return asyncio.run(_ingest(store, paths, chunk_size, chunk_overlap))
+    except (ConnectionError_, VectorStoreError, ValueError) as e:
+        print(f"ingest failed: {e}", file=sys.stderr)
+        return 1
 
 
 def cmd_schema() -> int:
@@ -86,11 +151,19 @@ def cli(argv: list[str] | None = None) -> None:
 
     sub.add_parser("schema", help="print the workflow JSON Schema")
 
+    ingest = sub.add_parser("ingest", help="chunk, embed and store text files in a vector store")
+    ingest.add_argument("store", help="vector store name from the connections file")
+    ingest.add_argument("files", nargs="+", metavar="FILE")
+    ingest.add_argument("--chunk-size", type=int, default=1000)
+    ingest.add_argument("--chunk-overlap", type=int, default=150)
+
     args = parser.parse_args(argv)
     if args.command == "validate":
         code = cmd_validate(args.files)
     elif args.command == "schema":
         code = cmd_schema()
+    elif args.command == "ingest":
+        code = cmd_ingest(args.store, args.files, args.chunk_size, args.chunk_overlap)
     else:
         code = cmd_serve(args.host, args.port, args.reload)
     sys.exit(code)

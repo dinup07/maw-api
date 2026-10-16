@@ -19,6 +19,7 @@ from ...observability.tracing import span
 from ...schema.workflow import LlmNode, WorkflowDefinition
 from ..paths import input_text, render, resolve_inputs, to_text
 from .base import EngineContext, NodeOutcome
+from .rag import retriever_tool
 
 FINAL_ANSWER_PROMPT = "Now give your final answer in the required structured format."
 TOOL_LIMIT_MESSAGE = "Tool call limit reached. Answer with what you have."
@@ -109,6 +110,7 @@ async def _build_tools(node: LlmNode, wf: WorkflowDefinition, ctx: EngineContext
         )
 
     tools.extend(get_function(name).as_tool() for name in node.tools.functions)
+    tools.extend(retriever_tool(ctx, name, wf) for name in node.tools.retrievers)
     return tools
 
 

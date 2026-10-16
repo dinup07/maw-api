@@ -10,7 +10,13 @@ from fastapi import FastAPI
 
 from .. import __version__
 from ..a2a_server import mount_workflow_agent
-from ..connectors import A2AConnector, ConnectionRegistry, McpConnector
+from ..connectors import (
+    A2AConnector,
+    ConnectionRegistry,
+    EmbeddingRegistry,
+    McpConnector,
+    VectorStoreConnector,
+)
 from ..engine.models import ModelRegistry
 from ..engine.nodes import EngineContext
 from ..functions import load_function_modules
@@ -20,7 +26,7 @@ from ..schema import WorkflowDefinition
 from ..settings import Settings, get_settings
 from .auth import ApiKeyMiddleware
 from .errors import install_error_handlers
-from .routers import connections, health, runs, workflows
+from .routers import connections, health, runs, vector_stores, workflows
 
 log = logging.getLogger("maw.api")
 
@@ -37,6 +43,11 @@ def build_engine_context(settings: Settings) -> EngineContext:
         a2a=A2AConnector(
             connections_,
             card_ttl_s=settings.a2a_card_cache_ttl_s,
+            default_timeout_s=settings.outbound_timeout_s,
+        ),
+        vectors=VectorStoreConnector(
+            connections_,
+            EmbeddingRegistry(connections_, allow_inline_api_keys=settings.allow_inline_api_keys),
             default_timeout_s=settings.outbound_timeout_s,
         ),
         default_max_tool_calls=settings.default_max_tool_calls,
@@ -67,7 +78,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with AsyncExitStack() as stack:
             ctx = build_engine_context(settings)
             stack.push_async_callback(ctx.a2a.aclose)
+            stack.push_async_callback(ctx.vectors.aclose)
             persistence = await open_persistence(settings.database_url, stack)
+            if persistence.pool is not None:
+                ctx.vectors.attach_pool(persistence.pool)  # the internal pgvector store
             service: RunService | None = None
             # Late-bound: the catalog validates with the service's known connections and functions.
             catalog = Catalog(persistence.store, validator=lambda wf: service.validate(wf))
@@ -95,7 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="MAW — Multi-Agent Workflow runtime", version=__version__, lifespan=lifespan)
     install_error_handlers(app)
-    for router in (health.router, runs.router, workflows.router, connections.router):
+    for router in (health.router, runs.router, workflows.router, connections.router, vector_stores.router):
         app.include_router(router)
     if settings.api_keys:
         app.add_middleware(ApiKeyMiddleware, api_keys=settings.api_keys)

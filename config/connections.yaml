@@ -19,3 +19,24 @@ agents:
   billing:
     url: ${env:BILLING_AGENT_URL:-http://localhost:9001}
     description: Answers questions about invoices, charges and refunds.
+vector_stores:
+  # Internal store: pgvector tables inside MAW's own Postgres (needs MAW_DATABASE_URL).
+  # Fill it with `maw ingest docs FILE...` or POST /v1/vector-stores/docs/documents.
+  docs:
+    provider: pgvector
+    collection: docs
+    description: Company documentation (IT, HR and billing policies).
+    # "scripted" embeddings are keyless keyword hashing, for demos. For real semantic search use e.g.
+    #   embedding: {provider: google_genai, model: text-embedding-004}   (GOOGLE_API_KEY)
+    #   embedding: {provider: openai, model: text-embedding-3-small}     (OPENAI_API_KEY)
+    # A collection only accepts one embedding model: switch models by changing `collection` too.
+    embedding:
+      provider: scripted
+      model: hashing-256
+  # External store (Qdrant): start one with `docker compose --profile qdrant up -d`.
+  # research:
+  #   provider: qdrant
+  #   url: ${env:QDRANT_URL:-http://localhost:6333}
+  #   api_key: ${secret:QDRANT_API_KEY}
+  #   collection: research
+  #   embedding: {provider: openai, model: text-embedding-3-small}

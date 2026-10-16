@@ -62,7 +62,10 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
 async def build_service(settings: Settings, stack: AsyncExitStack) -> RunService:
     load_function_modules(settings.function_modules)
     ctx = build_engine_context(settings)
+    stack.push_async_callback(ctx.vectors.aclose)
     persistence = await open_persistence(settings.database_url, stack)
+    if persistence.pool is not None:
+        ctx.vectors.attach_pool(persistence.pool)
     service: RunService | None = None
     catalog = Catalog(persistence.store, validator=lambda definition: service.validate(definition))
     service = RunService(settings, ctx, persistence, catalog)
@@ -159,3 +162,37 @@ def connections_file(tmp_path, mcp_url, billing_url) -> Path:
         "    description: Answers questions about invoices, charges and refunds.\n"
     )
     return path
+
+
+# --------------------------------------------------------------------------------------------------
+# A real API server in a background thread
+# --------------------------------------------------------------------------------------------------
+
+import threading  # noqa: E402
+
+import uvicorn  # noqa: E402
+
+from maw.api.app import create_app  # noqa: E402
+
+
+class ServerThread:
+    def __init__(self, settings):
+        self.app = create_app(settings)
+        self.server = uvicorn.Server(
+            uvicorn.Config(self.app, host="127.0.0.1", port=settings.port, log_config=None, lifespan="on")
+        )
+        self.thread = threading.Thread(target=self.server.run, daemon=True)
+        self.url = f"http://127.0.0.1:{settings.port}"
+
+    def __enter__(self) -> ServerThread:
+        self.thread.start()
+        deadline = time.monotonic() + 30
+        while not self.server.started:
+            if time.monotonic() > deadline or not self.thread.is_alive():
+                raise RuntimeError("API server did not start")
+            time.sleep(0.05)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.server.should_exit = True
+        self.thread.join(timeout=15)
