@@ -26,6 +26,7 @@ dependencies = [
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
     "prometheus-client",
+    "langchain-google-genai>=4.4.2",
 ]
 
 [project.scripts]

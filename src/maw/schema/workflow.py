@@ -59,6 +59,39 @@ class McpServerSpec(_Model):
         return self
 
 
+class EmbeddingSpec(_Model):
+    """An embedding model. ``provider`` is any ``init_embeddings`` provider, or ``scripted``."""
+
+    provider: str
+    model: str
+    base_url: str | None = None
+    api_key: str | None = None
+    params: dict[str, Any] = {}  # e.g. {"dimensions": 768} (OpenAI), {"output_dimensionality": 768} (Gemini)
+
+
+class VectorStoreSpec(_Model):
+    """A vector database collection.
+
+    ``pgvector`` without ``url`` uses MAW's own Postgres (the internal store); ``qdrant`` is an
+    external service; ``memory`` is process-local, for development and tests.
+    """
+
+    provider: Literal["pgvector", "qdrant", "memory"]
+    collection: str = Field(pattern=r"^[A-Za-z0-9_\-]{1,63}$")
+    embedding: EmbeddingSpec
+    url: str | None = None  # qdrant base URL, or a Postgres DSN for an external pgvector database
+    api_key: str | None = None
+    headers: dict[str, str] = {}
+    timeout_s: float | None = None
+    description: str | None = None  # tool description when an LLM searches this store
+
+    @model_validator(mode="after")
+    def _check_url(self) -> VectorStoreSpec:
+        if self.provider == "qdrant" and not self.url:
+            raise ValueError("qdrant vector stores need 'url'")
+        return self
+
+
 class AgentSpec(_Model):
     url: str
     card_path: str | None = None
@@ -105,12 +138,13 @@ class LlmTools(_Model):
     mcp: list[str | McpToolRef] = []
     agents: list[str] = []
     functions: list[str] = []
+    retrievers: list[str] = []  # vector stores the model can search
 
     def mcp_refs(self) -> list[McpToolRef]:
         return [McpToolRef(server=r) if isinstance(r, str) else r for r in self.mcp]
 
     def is_empty(self) -> bool:
-        return not (self.mcp or self.agents or self.functions)
+        return not (self.mcp or self.agents or self.functions or self.retrievers)
 
 
 class LlmNode(_NodeBase):
@@ -162,12 +196,25 @@ class HumanNode(_NodeBase):
     inputs: dict[str, Any] = {}
 
 
+class RagNode(_NodeBase):
+    """Retrieve relevant passages from a vector store for later nodes."""
+
+    type: Literal["rag"]
+    store: str
+    query: str | None = None  # template; defaults to the run input text
+    inputs: dict[str, Any] = {}
+    top_k: int = Field(4, ge=1, le=50)
+    min_score: float | None = None  # drop hits below this similarity (cosine, -1..1)
+    filter: dict[str, Any] = {}  # metadata equality filter; values are value expressions
+    max_context_chars: int = Field(8000, ge=100)
+
+
 Node = Annotated[
-    LlmNode | McpNode | A2aNode | FunctionNode | TransformNode | HumanNode,
+    LlmNode | McpNode | A2aNode | FunctionNode | TransformNode | HumanNode | RagNode,
     Field(discriminator="type"),
 ]
 
-NODE_TYPES = ("llm", "mcp", "a2a", "function", "transform", "human")
+NODE_TYPES = ("llm", "mcp", "a2a", "function", "transform", "human", "rag")
 
 
 # --------------------------------------------------------------------------------------------------
@@ -247,6 +294,7 @@ class WorkflowDefinition(_Model):
     models: dict[str, ModelSpec] = {}
     mcp_servers: dict[str, McpServerSpec] = {}
     agents: dict[str, AgentSpec] = {}
+    vector_stores: dict[str, VectorStoreSpec] = {}
     nodes: list[Node]
     edges: list[Edge]
     limits: Limits = Limits()

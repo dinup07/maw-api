@@ -19,7 +19,7 @@ from urllib.parse import urlsplit
 import yaml
 from pydantic import TypeAdapter
 
-from ..schema.workflow import AgentSpec, McpServerSpec, WorkflowDefinition
+from ..schema.workflow import AgentSpec, McpServerSpec, VectorStoreSpec, WorkflowDefinition
 
 _SECRET = re.compile(r"\$\{secret:([A-Za-z_][A-Za-z0-9_]*)\}")
 _ENV = re.compile(r"\$\{env:([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
@@ -76,6 +76,7 @@ def resolve_secrets_deep(value: Any, *, trusted: bool) -> Any:
 
 _MCP_MAP = TypeAdapter(dict[str, McpServerSpec])
 _AGENT_MAP = TypeAdapter(dict[str, AgentSpec])
+_VECTOR_MAP = TypeAdapter(dict[str, VectorStoreSpec])
 
 
 class ConnectionRegistry:
@@ -85,10 +86,12 @@ class ConnectionRegistry:
         *,
         mcp_servers: dict[str, McpServerSpec] | None = None,
         agents: dict[str, AgentSpec] | None = None,
+        vector_stores: dict[str, VectorStoreSpec] | None = None,
     ):
         self.allowed_hosts = [h.lower() for h in (allowed_hosts if allowed_hosts is not None else ["*"])]
         self.mcp_servers: dict[str, McpServerSpec] = dict(mcp_servers or {})
         self.agents: dict[str, AgentSpec] = dict(agents or {})
+        self.vector_stores: dict[str, VectorStoreSpec] = dict(vector_stores or {})
 
     @classmethod
     def from_file(cls, path: Path | str | None, allowed_hosts: list[str] | None = None) -> ConnectionRegistry:
@@ -101,6 +104,7 @@ class ConnectionRegistry:
             allowed_hosts,
             mcp_servers=_MCP_MAP.validate_python(data.get("mcp_servers") or {}),
             agents=_AGENT_MAP.validate_python(data.get("agents") or {}),
+            vector_stores=_VECTOR_MAP.validate_python(data.get("vector_stores") or {}),
         )
 
     def check_url(self, url: str) -> None:
@@ -139,6 +143,27 @@ class ConnectionRegistry:
         self.check_url(resolve_secrets(resolved.spec.url, trusted=resolved.trusted))
         return resolved
 
+    def vector_store(self, name: str, wf: WorkflowDefinition | None = None) -> Resolved[VectorStoreSpec]:
+        if wf is not None and name in wf.vector_stores:
+            resolved = Resolved(name, wf.vector_stores[name], trusted=False)
+        elif name in self.vector_stores:
+            resolved = Resolved(name, self.vector_stores[name], trusted=True)
+        else:
+            raise ConnectionError_(f"unknown vector store '{name}'")
+        spec = resolved.spec
+        if not resolved.trusted and spec.provider != "qdrant":
+            # pgvector reaches a database (MAW's own, or a DSN with credentials) and memory is
+            # process-wide state: both are operator decisions, made in the connections file.
+            raise ConnectionError_(
+                f"vector store '{name}': {spec.provider} stores can only be defined in the server-side "
+                "connections file"
+            )
+        if spec.provider == "qdrant" and spec.url:
+            self.check_url(resolve_secrets(spec.url, trusted=resolved.trusted))
+        if spec.embedding.base_url:
+            self.check_url(resolve_secrets(spec.embedding.base_url, trusted=resolved.trusted))
+        return resolved
+
     def describe(self) -> dict[str, Any]:
         """Public view: never includes headers or env (they may hold secrets)."""
         return {
@@ -147,4 +172,15 @@ class ConnectionRegistry:
                 for name, s in self.mcp_servers.items()
             },
             "agents": {name: {"url": a.url, "description": a.description} for name, a in self.agents.items()},
+            "vector_stores": {
+                name: {
+                    "provider": v.provider,
+                    "collection": v.collection,
+                    # a pgvector url is a DSN that may embed credentials: never shown
+                    "url": v.url if v.provider == "qdrant" else None,
+                    "embedding": f"{v.embedding.provider}:{v.embedding.model}",
+                    "description": v.description,
+                }
+                for name, v in self.vector_stores.items()
+            },
         }

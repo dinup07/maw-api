@@ -33,3 +33,12 @@ a2a_call_duration_seconds = Histogram(
 
 graph_cache_total = Counter("maw_graph_cache_total", "Compiled-graph cache lookups", ["result"])
 graph_compile_seconds = Histogram("maw_graph_compile_seconds", "Workflow compile time", buckets=BUCKETS)
+
+vector_queries_total = Counter("maw_vector_queries_total", "Vector store searches", ["store", "outcome"])
+vector_query_duration_seconds = Histogram(
+    "maw_vector_query_duration_seconds",
+    "Vector search duration (embedding + query)",
+    ["store"],
+    buckets=BUCKETS,
+)
+vector_upserts_total = Counter("maw_vector_upserts_total", "Chunks written to vector stores", ["store"])

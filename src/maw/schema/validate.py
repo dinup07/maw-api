@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from . import compat
-from .workflow import END, START, A2aNode, FunctionNode, LlmNode, McpNode, WorkflowDefinition
+from .workflow import END, START, A2aNode, FunctionNode, LlmNode, McpNode, RagNode, WorkflowDefinition
 
 
 class WorkflowValidationError(Exception):
@@ -45,12 +45,14 @@ def validate_graph(
     known_mcp_servers: Iterable[str] = (),
     known_agents: Iterable[str] = (),
     known_functions: Iterable[str] = (),
+    known_vector_stores: Iterable[str] = (),
 ) -> None:
     """Check the graph structure and references. Raises with **all** errors at once."""
     errors: list[str] = []
     mcp_servers = set(wf.mcp_servers) | set(known_mcp_servers)
     agents = set(wf.agents) | set(known_agents)
     functions = set(known_functions)
+    vector_stores = set(wf.vector_stores) | set(known_vector_stores)
 
     # 1. Duplicate node ids.
     ids = [n.id for n in wf.nodes]
@@ -117,6 +119,9 @@ def validate_graph(
             for name in node.tools.agents:
                 if name not in agents:
                     errors.append(f"{label}: unknown agent '{name}'")
+            for name in node.tools.retrievers:
+                if name not in vector_stores:
+                    errors.append(f"{label}: unknown vector store '{name}'")
             if functions:
                 for name in node.tools.functions:
                     if name not in functions:
@@ -128,6 +133,8 @@ def validate_graph(
             errors.append(f"{label}: unknown MCP server '{node.server}'")
         elif isinstance(node, A2aNode) and node.agent not in agents:
             errors.append(f"{label}: unknown agent '{node.agent}'")
+        elif isinstance(node, RagNode) and node.store not in vector_stores:
+            errors.append(f"{label}: unknown vector store '{node.store}'")
         elif isinstance(node, FunctionNode) and functions and node.function not in functions:
             errors.append(f"{label}: unknown function '{node.function}'")
 
