@@ -27,12 +27,29 @@ vector_stores:
     collection: docs
     description: Company documentation (IT, HR and billing policies).
     # "scripted" embeddings are keyless keyword hashing, for demos. For real semantic search use e.g.
-    #   embedding: {provider: google_genai, model: text-embedding-004}   (GOOGLE_API_KEY)
+    #   embedding: {provider: google_genai, model: models/gemini-embedding-001}   (GOOGLE_API_KEY)
     #   embedding: {provider: openai, model: text-embedding-3-small}     (OPENAI_API_KEY)
     # A collection only accepts one embedding model: switch models by changing `collection` too.
     embedding:
       provider: scripted
       model: hashing-256
+  # The same documents with real semantic embeddings. Each store has its own collection, because a
+  # collection only ever holds vectors from one embedding model.
+  docs_gemini:                     # needs GOOGLE_API_KEY (Google AI Studio)
+    provider: pgvector
+    collection: docs_gemini
+    description: Company documentation (IT, HR and billing policies).
+    embedding:
+      provider: google_genai
+      model: models/gemini-embedding-001
+      params: {output_dimensionality: 768}
+  docs_openai:                     # needs OPENAI_API_KEY
+    provider: pgvector
+    collection: docs_openai
+    description: Company documentation (IT, HR and billing policies).
+    embedding:
+      provider: openai
+      model: text-embedding-3-small
   # External store (Qdrant): start one with `docker compose --profile qdrant up -d`.
   # research:
   #   provider: qdrant

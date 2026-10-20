@@ -233,7 +233,7 @@ vector_stores:
   docs:                        # internal: pgvector tables in MAW's own Postgres
     provider: pgvector
     collection: docs
-    embedding: { provider: google_genai, model: text-embedding-004 }
+    embedding: { provider: google_genai, model: models/gemini-embedding-001 }
   research:                    # external
     provider: qdrant
     url: https://xyz.cloud.qdrant.io

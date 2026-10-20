@@ -11,7 +11,7 @@ from typing import Any
 from .connectors import ConnectionRegistry
 from .functions import function_names, load_function_modules
 from .schema import WorkflowDefinition, WorkflowValidationError, parse_workflow, validate_graph
-from .settings import get_settings
+from .settings import get_settings, load_env_file
 
 
 def _with_default_id(raw: Any, stem: str) -> Any:
@@ -158,6 +158,7 @@ def cli(argv: list[str] | None = None) -> None:
     ingest.add_argument("--chunk-overlap", type=int, default=150)
 
     args = parser.parse_args(argv)
+    load_env_file()
     if args.command == "validate":
         code = cmd_validate(args.files)
     elif args.command == "schema":

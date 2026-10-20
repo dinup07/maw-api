@@ -22,6 +22,7 @@ dependencies = [
     "langgraph-checkpoint-postgres",
     "psycopg[binary,pool]",
     "pyyaml>=6",
+    "python-dotenv>=1",
     "httpx>=0.28.1",
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp-proto-http",
@@ -47,6 +48,7 @@ build-backend = "uv_build"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
+markers = ["live: calls real LLM/embedding APIs (needs OPENAI_API_KEY and/or GOOGLE_API_KEY)"]
 
 [tool.ruff]
 line-length = 110

@@ -17,6 +17,12 @@ WORKFLOWS_DIR = REPO_ROOT / "workflows"
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
+# Tests must not depend on the developer's configuration: drop MAW_* settings from the shell (test
+# knobs like MAW_TEST_DATABASE_URL and MAW_LIVE_* stay) and never read a .env file.
+for _name in [n for n in os.environ if n.startswith("MAW_") and not n.startswith(("MAW_TEST_", "MAW_LIVE_"))]:
+    del os.environ[_name]
+os.environ["MAW_ENV_FILE"] = str(TESTS_DIR / "no-such.env")
+
 from maw.functions import load_function_modules  # noqa: E402
 
 load_function_modules(["fixture_functions"])
@@ -49,6 +55,7 @@ from maw.settings import Settings  # noqa: E402
 
 def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
     values: dict[str, Any] = {
+        "_env_file": None,
         "workflows_dir": WORKFLOWS_DIR,
         "connections_file": tmp_path / "no-connections.yaml",
         "database_url": None,

@@ -23,7 +23,7 @@ from ..functions import load_function_modules
 from ..observability import setup_logging, setup_tracing
 from ..runtime import Catalog, RunService, open_persistence
 from ..schema import WorkflowDefinition
-from ..settings import Settings, get_settings
+from ..settings import Settings, get_settings, load_env_file
 from .auth import ApiKeyMiddleware
 from .errors import install_error_handlers
 from .routers import connections, health, runs, vector_stores, workflows
@@ -66,8 +66,25 @@ def mount_agent(app: FastAPI, service: RunService, wf: WorkflowDefinition) -> bo
     return True
 
 
+class InsecureConfigurationError(RuntimeError):
+    """MAW_ENV=production with development-only settings."""
+
+
+def check_production(settings: Settings) -> None:
+    if settings.env != "production":
+        return
+    problems = settings.production_problems()
+    if problems:
+        raise InsecureConfigurationError(
+            "refusing to start with MAW_ENV=production:\n  - " + "\n  - ".join(problems)
+        )
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or get_settings()
+    if settings is None:
+        load_env_file()
+        settings = get_settings()
+    check_production(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

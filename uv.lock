@@ -1106,6 +1106,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1138,6 +1139,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary", "pool"] },
     { name = "pydantic", specifier = ">=2.8" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv", specifier = ">=1" },
     { name = "pyyaml", specifier = ">=6" },
     { name = "uvicorn", extras = ["standard"] },
 ]
