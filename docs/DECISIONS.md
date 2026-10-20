@@ -90,3 +90,25 @@ Choices made where the spec is silent or ambiguous. Newest last.
     documented as demo-only.
 31. **Example RAG workflows live in `examples/`, not the catalog**, so the spec's catalog of five
     workflows (and its acceptance checks) stays as specified.
+32. **`maw` exports `.env` into the process environment** (python-dotenv, existing variables win).
+    pydantic-settings only maps `MAW_*` fields, but provider SDKs read `OPENAI_API_KEY` /
+    `GOOGLE_API_KEY` from `os.environ`, as do `MAW_SECRET_*` and `${env:…}`. `MAW_ENV_FILE` picks
+    another file.
+33. **`MAW_ENV=production` fails fast** on development-only settings (no API keys, `*` outbound
+    allowlist, inline API keys, no database) instead of warning, because each is exploitable on a
+    reachable server.
+34. **Tests ignore the developer's configuration:** `conftest.py` drops `MAW_*` variables and points
+    `MAW_ENV_FILE` at a missing file; live tests read only the two provider keys from `.env`.
+35. **Compose pins container-internal service URLs** rather than interpolating them, because Compose
+    also reads the project `.env` for `${…}` and a host-oriented `.env` (127.0.0.1) would break the
+    containers.
+36. **Real-embedding stores get their own collections** (`docs_gemini`, `docs_openai`) next to the
+    keyless `docs`, so switching embedding models never mixes vector spaces. Gemini uses
+    `gemini-embedding-001` at 768 dimensions (`text-embedding-004` is being retired).
+37. **Single-VM deployment:** Caddy terminates TLS with a `<ip>.sslip.io` hostname (no domain needed),
+    publishes only 80/443, hides `/metrics` and disables response buffering for SSE. Postgres gets a
+    generated password; secrets live only in `/opt/maw/.env` (0600). Backups are nightly
+    `pg_dump`s kept 14 days. The image is built on the VM, so no registry credentials are needed; a
+    tag-triggered workflow also publishes it to GHCR.
+38. **Remote ingestion goes over the HTTP API** (`scripts/ingest_remote.py`, stdlib only) because the
+    image intentionally ships no example documents and Markdown is excluded from the build context.

@@ -23,6 +23,9 @@ providers configured as data. Everything runs **without API keys**, using a dete
 
 ## Quick start
 
+**New here? Follow [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)** (clone → `make setup` → keys in `.env`
+→ `make services` → `make serve`). To put it on a server, see [docs/DEPLOY.md](docs/DEPLOY.md).
+
 ### Docker Compose (MAW + Postgres + mock MCP server + mock A2A agent)
 
 ```bash
@@ -130,10 +133,13 @@ Workflows reference other secrets as `${secret:NAME}`, which reads `MAW_SECRET_N
 ## Development
 
 ```bash
-uv run ruff check src tests mocks
-uv run pytest -q                       # durability tests skip without a database
-MAW_TEST_DATABASE_URL=postgresql://maw:maw@localhost:5432/maw uv run pytest -q
+make lint          # ruff + format check + maw validate
+make test          # fast suite; database, Qdrant and live-model tests skip
+make test-all      # starts Postgres+pgvector and Qdrant in Docker and runs everything
+make live-test     # real OpenAI/Gemini calls, keys from .env
 ```
+
+`CLAUDE.md` describes the codebase for Claude Code.
 
 Tests start the mock MCP server and mock A2A agent as subprocesses, and the API tests run a real
 uvicorn server.

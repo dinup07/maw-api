@@ -53,14 +53,17 @@ services:
     env_file:
       - path: .env
         required: false
+    # .env is passed in for provider keys and MAW_* settings; the service URLs below always win,
+    # because values in `environment` take precedence over env_file.
     environment:
       MAW_DATABASE_URL: postgresql://maw:maw@postgres:5432/maw
       MAW_PUBLIC_URL: ${MAW_PUBLIC_URL:-http://localhost:8000}
       KB_MCP_URL: http://mock-mcp:8001/mcp
       BILLING_AGENT_URL: http://mock-a2a:9001
       MAW_TRACING_ENABLED: ${MAW_TRACING_ENABLED:-false}
-      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4318}
-      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      # Not ${OTEL_EXPORTER_OTLP_ENDPOINT}: a host-side .env value (localhost) would be wrong in here.
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${COMPOSE_OTLP_ENDPOINT:-http://jaeger:4318}
+      QDRANT_URL: http://qdrant:6333
     ports:
       - "8000:8000"
 
