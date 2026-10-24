@@ -1,0 +1,41 @@
+{
+  "id": "rag_qa_openai",
+  "description": "Retrieval-augmented generation with OpenAI: retrieve passages from the OpenAI-embedded store, then answer only from them, citing sources. Needs OPENAI_API_KEY.",
+  "models": {
+    "gpt": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0
+    }
+  },
+  "nodes": [
+    {
+      "id": "retrieve",
+      "type": "rag",
+      "store": "docs_openai",
+      "top_k": 4,
+      "write_output": false
+    },
+    {
+      "id": "answer",
+      "type": "llm",
+      "model": "gpt",
+      "system_prompt": "Answer the employee's question using only the numbered passages. Cite passages like [1]. If the passages don't contain the answer, say you don't know.",
+      "user_message": "Passages:\n{{ nodes.retrieve.context }}\n\nQuestion: {{ input }}"
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "retrieve"
+    },
+    {
+      "source": "retrieve",
+      "target": "answer"
+    },
+    {
+      "source": "answer",
+      "target": "end"
+    }
+  ]
+}

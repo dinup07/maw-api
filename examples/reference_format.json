@@ -1,0 +1,22 @@
+{
+  "workflow_config": {
+    "nodes": [
+      {
+        "id": "sentiment_analyzer",
+        "type": "llm_node",
+        "model": "scripted",
+        "system_prompt": "Classify sentiment as positive, negative or neutral.",
+        "structured_output_schema": {
+          "type": "object",
+          "properties": { "sentiment": { "type": "string" } },
+          "required": ["sentiment"]
+        }
+      }
+    ],
+    "edges": [
+      { "source": "start", "target": "sentiment_analyzer" },
+      { "source": "sentiment_analyzer", "target": "end" }
+    ]
+  },
+  "input_prompt": "I love this product"
+}

@@ -1,0 +1,7 @@
+# Local development overlay: run MAW itself on the host (uv run maw serve) and only its services in
+# Docker. Publishes Postgres on 127.0.0.1:55432 (not 5432, to avoid clashing with a local Postgres).
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:55432:5432"

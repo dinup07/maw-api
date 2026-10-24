@@ -1,0 +1,30 @@
+{
+  "id": "concierge",
+  "description": "One LLM that can call MCP tools AND an external A2A agent as tools, deciding which to use.",
+  "models": {
+    "concierge": { "provider": "scripted", "model": "concierge",
+      "params": {
+        "rules": [{
+          "contains": ["invoice", "charge", "refund"],
+          "respond": [
+            { "tool_calls": [{ "name": "billing", "args": { "message": "Was INV-1001 charged twice?" } }] },
+            "I checked with the billing agent: INV-1001 was charged twice and a refund has been issued."
+          ] }],
+        "responses": [
+          { "tool_calls": [{ "name": "search_kb", "args": { "query": "laptop charge", "limit": 1 } }] },
+          "From the knowledge base: try a different outlet, then hold the power button for 30 seconds."
+        ]
+      } }
+  },
+  "nodes": [
+    { "id": "concierge", "type": "llm", "model": "concierge",
+      "system_prompt": "Help the employee. Use the knowledge base for IT questions and the billing agent for invoices.",
+      "tools": { "mcp": ["kb"], "agents": ["billing"] },
+      "history": "all", "max_tool_calls": 4 }
+  ],
+  "edges": [
+    { "source": "start", "target": "concierge" },
+    { "source": "concierge", "target": "end" }
+  ],
+  "expose": { "a2a": true, "description": "Employee concierge with access to the KB and the billing agent." }
+}

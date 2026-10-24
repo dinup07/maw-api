@@ -1,0 +1,210 @@
+{
+  "id": "openai_support_triage",
+  "version": "1.0.0",
+  "description": "Classifies a support request and routes it: billing -> external A2A agent, IT -> LLM with MCP tools, HR -> deterministic MCP lookup, anything else -> open a ticket.",
+  "models": {
+    "router": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0
+    },
+    "it_assistant": {
+      "provider": "openai",
+      "model": "gpt-4o-mini"
+    }
+  },
+  "nodes": [
+    {
+      "id": "classify",
+      "type": "llm",
+      "model": "router",
+      "system_prompt": "Classify the employee request. category: billing | it | hr | general. urgency: low | normal | high.",
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "billing",
+              "it",
+              "hr",
+              "general"
+            ]
+          },
+          "urgency": {
+            "type": "string",
+            "enum": [
+              "low",
+              "normal",
+              "high"
+            ]
+          }
+        },
+        "required": [
+          "category",
+          "urgency"
+        ]
+      },
+      "retry": {
+        "max_attempts": 2
+      }
+    },
+    {
+      "id": "billing",
+      "type": "a2a",
+      "agent": "billing",
+      "message": "{{ input }}",
+      "timeout_s": 30
+    },
+    {
+      "id": "it_support",
+      "type": "llm",
+      "model": "it_assistant",
+      "system_prompt": "You are the IT service desk. Use the knowledge base before answering.",
+      "tools": {
+        "mcp": [
+          {
+            "server": "kb",
+            "allow": [
+              "search_kb"
+            ]
+          }
+        ]
+      },
+      "max_tool_calls": 3
+    },
+    {
+      "id": "hr_lookup",
+      "type": "mcp",
+      "server": "kb",
+      "tool": "search_kb",
+      "arguments": {
+        "query": "input",
+        "limit": 1
+      },
+      "write_output": false
+    },
+    {
+      "id": "hr_answer",
+      "type": "transform",
+      "mapping": {
+        "text": "Per HR policy ({{ nodes.hr_lookup.articles.0.id }}): {{ nodes.hr_lookup.articles.0.body }}",
+        "source": "nodes.hr_lookup.articles.0.id"
+      }
+    },
+    {
+      "id": "open_ticket",
+      "type": "mcp",
+      "server": "kb",
+      "tool": "create_ticket",
+      "arguments": {
+        "title": "input",
+        "category": "nodes.classify.category",
+        "priority": "nodes.classify.urgency"
+      },
+      "on_error": "continue"
+    },
+    {
+      "id": "general_reply",
+      "type": "transform",
+      "mapping": {
+        "text": "Thanks - I've opened ticket {{ nodes.open_ticket.ticket_id || 'pending' }} and the service desk will follow up."
+      }
+    },
+    {
+      "id": "respond",
+      "type": "transform",
+      "mapping": {
+        "text": "nodes.billing.text || nodes.it_support.text || nodes.hr_answer.text || nodes.general_reply.text",
+        "category": "nodes.classify.category",
+        "urgency": "nodes.classify.urgency",
+        "ticket_id": "nodes.open_ticket.ticket_id",
+        "billing_details": "nodes.billing.data",
+        "kb_source": "nodes.hr_answer.source"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "start",
+      "target": "classify"
+    },
+    {
+      "source": "classify",
+      "target": "open_ticket",
+      "condition": [
+        {
+          "field": "output.category",
+          "operator": "equals",
+          "value": "billing",
+          "target": "billing"
+        },
+        {
+          "field": "output.category",
+          "operator": "equals",
+          "value": "it",
+          "target": "it_support"
+        },
+        {
+          "field": "output.category",
+          "operator": "equals",
+          "value": "hr",
+          "target": "hr_lookup"
+        }
+      ]
+    },
+    {
+      "source": "billing",
+      "target": "respond"
+    },
+    {
+      "source": "it_support",
+      "target": "respond"
+    },
+    {
+      "source": "hr_lookup",
+      "target": "hr_answer"
+    },
+    {
+      "source": "hr_answer",
+      "target": "respond"
+    },
+    {
+      "source": "open_ticket",
+      "target": "general_reply"
+    },
+    {
+      "source": "general_reply",
+      "target": "respond"
+    },
+    {
+      "source": "respond",
+      "target": "end"
+    }
+  ],
+  "limits": {
+    "recursion_limit": 25
+  },
+  "expose": {
+    "a2a": true,
+    "name": "Support triage",
+    "description": "Routes employee support requests to billing, IT, HR or a ticket.",
+    "skills": [
+      {
+        "id": "triage",
+        "name": "Support triage",
+        "description": "Answer or route an employee support request",
+        "tags": [
+          "support",
+          "it",
+          "hr",
+          "billing"
+        ],
+        "examples": [
+          "I can't connect to the VPN",
+          "Was INV-1001 charged twice?"
+        ]
+      }
+    ]
+  }
+}

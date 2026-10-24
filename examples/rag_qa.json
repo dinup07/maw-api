@@ -1,0 +1,20 @@
+{
+  "id": "rag_qa",
+  "description": "Retrieval-augmented answer without any API keys: retrieve passages from the internal 'docs' store, then answer from the best one with its source.",
+  "nodes": [
+    { "id": "retrieve", "type": "rag", "store": "docs", "top_k": 3, "min_score": 0.05, "write_output": false },
+    {
+      "id": "answer", "type": "transform",
+      "mapping": {
+        "text": "{{ nodes.retrieve.documents.0.text || 'I could not find anything about that in the documentation.' }}",
+        "source": "nodes.retrieve.documents.0.metadata.source",
+        "sources_found": "nodes.retrieve.count"
+      }
+    }
+  ],
+  "edges": [
+    { "source": "start", "target": "retrieve" },
+    { "source": "retrieve", "target": "answer" },
+    { "source": "answer", "target": "end" }
+  ]
+}

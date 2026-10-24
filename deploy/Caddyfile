@@ -1,0 +1,20 @@
+# HTTPS reverse proxy for MAW. MAW_HOSTNAME is e.g. 203-0-113-7.sslip.io (a free DNS name that
+# resolves to the IP in it), so Let's Encrypt can issue a real certificate without owning a domain.
+{$MAW_HOSTNAME} {
+	encode zstd gzip
+
+	# Prometheus metrics stay private (scrape them from the VM or over an SSH tunnel).
+	@metrics path /metrics
+	respond @metrics 404
+
+	reverse_proxy maw:8000 {
+		# Stream Server-Sent Events immediately instead of buffering them.
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+}

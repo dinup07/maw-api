@@ -1,0 +1,53 @@
+# Production overlay for a single VM. Use with the base file:
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d --build
+# Reads /opt/maw/.env (created by deploy/setup-vm.sh). Only Caddy is reachable from outside (80/443).
+services:
+  postgres:
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+
+  mock-mcp:
+    restart: unless-stopped
+    ports: !reset []
+
+  mock-a2a:
+    restart: unless-stopped
+    ports: !reset []
+
+  maw:
+    restart: unless-stopped
+    ports: !reset []
+    environment:
+      MAW_ENV: production
+      MAW_DATABASE_URL: postgresql://maw:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/maw
+      MAW_PUBLIC_URL: https://${MAW_HOSTNAME:?set MAW_HOSTNAME in .env}
+      MAW_LOG_JSON: "true"
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "5"}
+
+  caddy:
+    image: caddy:2.8
+    restart: unless-stopped
+    depends_on: [maw]
+    environment:
+      MAW_HOSTNAME: ${MAW_HOSTNAME:?set MAW_HOSTNAME in .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  qdrant:
+    restart: unless-stopped
+    ports: !reset []
+
+volumes:
+  caddy_data:
+  caddy_config:
