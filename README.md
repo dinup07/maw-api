@@ -24,7 +24,9 @@ providers configured as data. Everything runs **without API keys**, using a dete
 ## Quick start
 
 **New here? Follow [docs/LOCAL_SETUP.md](docs/LOCAL_SETUP.md)** (clone → `make setup` → keys in `.env`
-→ `make services` → `make serve`). To put it on a server, see [docs/DEPLOY.md](docs/DEPLOY.md).
+→ `make services` → `make serve`). Each integration (database, LLM providers, vector stores, MCP,
+A2A, tracing, auth) is explained in [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md). To put it on a
+server, see [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ### Docker Compose (MAW + Postgres + mock MCP server + mock A2A agent)
 

@@ -93,11 +93,13 @@ tests. Mocks run as real subprocesses; API tests run a real uvicorn server in a 
 
 ## Configuration
 
-Settings are `MAW_*` env vars (see `src/maw/settings.py` and `.env.example`). `maw` loads `.env` into
+Settings are `MAW_*` env vars (see `src/maw/settings.py` and `.env.example`). Never read or print
+`.env` (it holds the developer's API keys; `.claude/settings.json` denies it). `maw` loads `.env` into
 the process environment, so provider keys there reach LangChain. `MAW_ENV=production` refuses to start
 without API keys, an outbound allowlist and a database. Deployment: `docs/DEPLOY.md`.
 
 ## Docs to keep in sync
 
-`README.md`, `docs/WORKFLOWS.md` (authoring reference), `docs/API.md`, `docs/ARCHITECTURE.md`,
+`README.md`, `docs/LOCAL_SETUP.md`, `docs/INTEGRATIONS.md` (per-integration setup), `docs/DEPLOY.md`,
+`docs/WORKFLOWS.md` (authoring reference), `docs/API.md`, `docs/ARCHITECTURE.md`,
 `docs/DECISIONS.md` (append a numbered entry for any non-obvious choice), `examples/README.md`.

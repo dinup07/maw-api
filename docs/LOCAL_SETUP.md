@@ -1,7 +1,8 @@
 # Running MAW on your machine
 
 This guide takes you from a fresh clone to a running MAW with real Gemini/OpenAI models, and to
-working on the code with Claude Code. Tested on Linux; macOS works the same way. On Windows, use
+working on the code with Claude Code. For each integration in depth — the database, LLM providers,
+vector stores, MCP servers, A2A agents, tracing, auth — see [INTEGRATIONS.md](INTEGRATIONS.md). Tested on Linux; macOS works the same way. On Windows, use
 WSL2 (Ubuntu) and follow the Linux steps inside it.
 
 ## 1. Prerequisites
@@ -76,16 +77,28 @@ make live-test     # real OpenAI/Gemini calls using your .env keys (a few cents)
 Your `.env` never affects `make test`/`make test-all`: the test suite ignores it, except that the
 live tests read the two provider keys from it.
 
-## 7. Working with Claude Code
+## 7. Working with Claude Code in your IDE
 
-```bash
-cd maw-api
-claude
-```
+Install Claude Code (see https://docs.claude.com/en/docs/claude-code for the current installer),
+then either:
 
-The repo already has a `CLAUDE.md` with the commands, architecture, rules and gotchas, so Claude
-Code starts with full context. You can still run `/init` inside Claude Code; it will review the
-codebase and offer to improve the existing `CLAUDE.md` rather than replace it.
+- **VS Code / Cursor / Windsurf:** install the *Claude Code* extension from the marketplace, open the
+  `maw-api` folder, and open Claude Code from the editor (or run `claude` in the integrated
+  terminal — it connects to the editor so it can see your open files and selections).
+- **JetBrains (PyCharm, IntelliJ):** install the *Claude Code* plugin, open the project, and run
+  `claude` in the IDE terminal.
+- **Plain terminal:** `cd maw-api && claude`. Inside a session, `/ide` connects it to a running IDE.
+
+What the repo already provides for Claude Code:
+
+- `CLAUDE.md` — commands, architecture, rules and gotchas, loaded automatically. You can still run
+  `/init`; it will review the codebase and offer to improve the existing file rather than replace it.
+- `.claude/settings.json` — pre-approves safe project commands (`make test`, `make lint`,
+  `uv run pytest`, …) so you're asked less often, and **denies reading `.env`**, so your API keys
+  never enter a conversation. Personal overrides go in `.claude/settings.local.json` (git-ignored).
+
+For the Python tooling in your IDE, select the interpreter at `maw-api/.venv/bin/python` (created by
+`make setup`); tests run with pytest from the repo root.
 
 Useful first prompts:
 
